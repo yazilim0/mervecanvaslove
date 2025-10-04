@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Love</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #000;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            padding: 0;
+            touch-action: none; /* Telefon scroll'unu engelle */
+            user-select: none; /* Metin seçimini engelle */
+            -webkit-user-select: none;
+            -webkit-touch-callout: none;
+        }
+
+        canvas {
+            background: #000;
+            display: block;
+            touch-action: none;
+        }
+
+        /* Telefon için özel ayarlar */
+        @media (max-width: 768px) {
+            body {
+                height: 100vh;
+                height: -webkit-fill-available; /* iOS Safari için */
+            }
+        }
+
+        /* Yatay telefon için */
+        @media (max-width: 768px) and (orientation: landscape) {
+            body {
+                height: 100vh;
+            }
+        }
+    </style>
+</head>
+<body>
+    <canvas id="canvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Responsive canvas boyutlandırma
+        function resizeCanvas() {
+            const dpr = window.devicePixelRatio || 1;
+            const rect = canvas.getBoundingClientRect();
+            
+            canvas.width = window.innerWidth * dpr;
+            canvas.height = window.innerHeight * dpr;
+            
+            canvas.style.width = window.innerWidth + 'px';
+            canvas.style.height = window.innerHeight + 'px';
+            
+            ctx.scale(dpr, dpr);
+        }
+        
+        resizeCanvas();
+        
+        let particles = [];
+        let time = 0;
+        let showText = false;
+        let textOpacity = 0;
+        let textStartTime = 0;
+        let heartFormed = false;
+        let letterAnimationTime = 0;
+        
+        // Kalp şekli için matematiksel formül (videodaki gibi)
+        function heartFunction(t) {
+            const x = 16 * Math.pow(Math.sin(t), 3);
+            const y = -(13 * Math.cos(t) - 5 * Math.cos(2*t) - 2 * Math.cos(3*t) - Math.cos(4*t));
+            return { x: x * 8, y: y * 8 };
+        }
+        
+        // Parçacık sınıfı
+        class HeartParticle {
+            constructor(t) {
+                this.t = t;
+                this.originalT = t;
+                
+                // Kalp üzerindeki pozisyon
+                const pos = heartFunction(t);
+                this.targetX = pos.x;
+                this.targetY = pos.y;
+                
+                // Başlangıç pozisyonu (rastgele)
+                this.x = (Math.random() - 0.5) * canvas.width;
+                this.y = (Math.random() - 0.5) * canvas.height;
+                
+                // Hareket özellikleri
+                this.vx = 0;
+                this.vy = 0;
+                
+                // Görsel özellikler
+                this.size = Math.random() * 3 + 2;
+                this.opacity = Math.random() * 0.5 + 0.7; // Daha opak
+                this.hue = Math.random() * 15 + 0; // Saf kırmızı tonları
+                
+                // Animasyon özellikleri
+                this.offset = Math.random() * Math.PI * 2;
+                this.speed = Math.random() * 0.02 + 0.01;
+            }
+            
+            update() {
+                // Kalp şeklindeki hedef pozisyonu güncelle
+                const animatedT = this.originalT + Math.sin(time * 0.01 + this.offset) * 0.1;
+                const pos = heartFunction(animatedT);
+                
+                // Merkeze taşı
+                this.targetX = pos.x + canvas.width / 2;
+                this.targetY = pos.y + canvas.height / 2 - 50;
+                
+                // Hedefe doğru hareket et
+                const dx = this.targetX - this.x;
+                const dy = this.targetY - this.y;
+                
+                this.vx += dx * 0.0003;
+                this.vy += dy * 0.0003;
+                
+                // Sürtünme
+                this.vx *= 0.99;
+                this.vy *= 0.99;
+                
+                // Pozisyonu güncelle
+                this.x += this.vx;
+                this.y += this.vy;
+                
+                // Boyut animasyonu
+                this.size = 2 + Math.sin(time * 0.05 + this.offset) * 1;
+                
+                // Renk animasyonu - daha kırmızı
+                this.hue = 0 + Math.sin(time * 0.02 + this.offset) * 10;
+            }
+            
+            draw() {
+                ctx.save();
+                
+                // Glow efekti - daha güçlü kırmızı
+                ctx.shadowColor = `hsl(${this.hue}, 100%, 60%)`;
+                ctx.shadowBlur = 15;
+                
+                // Ana parçacık - daha canlı kırmızı
+                ctx.fillStyle = `hsla(${this.hue}, 100%, 50%, ${this.opacity})`;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // İç parçacık (daha parlak kırmızı)
+                ctx.fillStyle = `hsla(${this.hue}, 100%, 70%, ${this.opacity})`;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size * 0.5, 0, Math.PI * 2);
+                ctx.fill();
+                
+                ctx.restore();
+            }
+        }
+        
+        // Minik kalp parçacığı sınıfı (MERVE yazısı için)
+        class MiniHeartParticle {
+            constructor(x, y, delay = 0) {
+                this.targetX = x;
+                this.targetY = y;
+                this.x = x + (Math.random() - 0.5) * 100;
+                this.y = y + (Math.random() - 0.5) * 100;
+                this.size = Math.random() * 2 + 1;
+                this.opacity = 0;
+                this.delay = delay;
+                this.hue = Math.random() * 20 + 10; // Soft kırmızı (10-30)
+                this.offset = Math.random() * Math.PI * 2;
+            }
+            
+            update() {
+                if (time > this.delay) {
+                    // Hedefe doğru hareket
+                    const dx = this.targetX - this.x;
+                    const dy = this.targetY - this.y;
+                    this.x += dx * 0.05;
+                    this.y += dy * 0.05;
+                    
+                    // Opacity artır
+                    if (this.opacity < 1) this.opacity += 0.02;
+                    
+                    // Kalp nabzı efekti
+                    this.size = 1.5 + Math.sin(time * 0.1 + this.offset) * 0.5;
+                }
+            }
+            
+            draw() {
+                if (this.opacity > 0) {
+                    ctx.save();
+                    ctx.globalAlpha = this.opacity * textOpacity;
+                    
+                    // Minik kalp çiz
+                    ctx.fillStyle = `hsl(${this.hue}, 100%, 60%)`;
+                    ctx.translate(this.x, this.y);
+                    ctx.scale(this.size * 0.3, this.size * 0.3);
+                    
+                    // Kalp şekli çiz
+                    ctx.beginPath();
+                    ctx.moveTo(0, 3);
+                    ctx.bezierCurveTo(-3, -2, -8, -2, -8, 3);
+                    ctx.bezierCurveTo(-8, 7, 0, 13, 0, 13);
+                    ctx.bezierCurveTo(0, 13, 8, 7, 8, 3);
+                    ctx.bezierCurveTo(8, -2, 3, -2, 0, 3);
+                    ctx.fill();
+                    
+                    ctx.restore();
+                }
+            }
+        }
+        
+        // MERVE yazısını minik kalplerle oluştur
+        function createTextParticles() {
+            textParticles = [];
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+            
+            // Kalbin üst noktasının aşağısında konumlandır (responsive)
+            const heartTopY = centerY - 50 - 50; // Kalbin üst noktası
+            const textY = heartTopY + 80; // Üst noktanın aşağısı
+            const textX = centerX; // Tam ortada
+            
+            // MERVE harflerinin koordinatları (basit ve net)
+            const letters = [
+                // M harfi
+                [-30, -8], [-30, -4], [-30, 0], [-30, 4], [-30, 8],
+                [-26, -6], [-22, -4], [-18, -6], 
+                [-14, -8], [-14, -4], [-14, 0], [-14, 4], [-14, 8],
+                
+                // E harfi  
+                [-8, -8], [-8, -4], [-8, 0], [-8, 4], [-8, 8],
+                [-4, -8], [0, -8], [-4, 0], [-4, 8], [0, 8],
+                
+                // R harfi
+                [6, -8], [6, -4], [6, 0], [6, 4], [6, 8],
+                [10, -8], [14, -8], [14, -4], [10, 0], [12, 4], [14, 8],
+                
+                // V harfi
+                [20, -8], [22, -4], [24, 0], [26, 4], [28, 8],
+                [36, -8], [34, -4], [32, 0], [30, 4], [28, 8],
+                
+                // E harfi
+                [42, -8], [42, -4], [42, 0], [42, 4], [42, 8],
+                [46, -8], [50, -8], [46, 0], [46, 8], [50, 8]
+            ];
+            
+            let delay = 0;
+            letters.forEach(([x, y]) => {
+                // Responsive ölçekleme
+                const scale = Math.min(canvas.width, canvas.height) / 800;
+                textParticles.push(new MiniHeartParticle(
+                    textX + (x * scale), // Responsive ölçek
+                    textY + (y * scale), 
+                    delay
+                ));
+                delay += 2;
+            });
+        }
+        
+        // Parçacıkları oluştur
+        function createParticles() {
+            particles = [];
+            const particleCount = 300; // Videodaki yoğunluk
+            
+            for (let i = 0; i < particleCount; i++) {
+                const t = (i / particleCount) * Math.PI * 2;
+                particles.push(new HeartParticle(t));
+            }
+            
+            // Ekstra parçacıklar kalp içi için
+            for (let i = 0; i < 100; i++) {
+                const t = Math.random() * Math.PI * 2;
+                particles.push(new HeartParticle(t));
+            }
+        }
+        
+        // Ana animasyon döngüsü
+        function animate() {
+            // Arka planı temizle (fade efekti için)
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Parçacıkları güncelle ve çiz
+            particles.forEach(particle => {
+                particle.update();
+                particle.draw();
+            });
+            
+            // Kalp oluşumu kontrolü
+            if (time > 300) { // 5 saniye sonra kalp oluştu
+                heartFormed = true;
+            }
+            
+            // Yazı döngüsü kontrolü (8 saniye ekranda, 3 saniye kayıp)
+            if (heartFormed) {
+                if (!showText && (time - textStartTime) > 180) { // 3 saniye ara
+                    showText = true;
+                    textStartTime = time;
+                    textOpacity = 0;
+                }
+                
+                if (showText) {
+                    // Yazı belirme
+                    if (textOpacity < 1) {
+                        textOpacity += 0.02;
+                    }
+                    
+                    // 8 saniye sonra yazı kaybolma (nefes alma animasyonuyla)
+                    if ((time - textStartTime) > 480) { // 8 saniye görünür
+                        textOpacity -= 0.03;
+                        if (textOpacity <= 0) {
+                            showText = false;
+                            textStartTime = time;
+                        }
+                    }
+                }
+            }
+            
+            // MERVE yazısını çiz (harf harf animasyon)
+            if (showText && textOpacity > 0) {
+                ctx.save();
+                ctx.globalAlpha = textOpacity;
+                
+                // Küçük minimal italik font
+                const fontSize = Math.min(canvas.width, canvas.height) / 30;
+                ctx.font = `italic ${fontSize}px "Georgia", "Times New Roman", serif`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                
+                const textX = canvas.width / 2;
+                const textY = canvas.height / 2 - 20;
+                const letters = ['M', 'E', 'R', 'V', 'E'];
+                
+                // Harf animasyon zamanlaması (çok daha yavaş)
+                const totalAnimationTime = (time - textStartTime) / 60; // Çok yavaş
+                
+                // İlk önce tüm harfler beyaz olarak belirsin
+                const whitePhase = Math.min(1, totalAnimationTime * 3); // Beyaz yazı hızlı belirsin
+                
+                // Sonra kırmızıya dönüşüm başlasın
+                const colorAnimationStart = Math.max(0, totalAnimationTime - 0.5);
+                
+                // Her harfi ayrı ayrı çiz
+                letters.forEach((letter, index) => {
+                    const letterDelay = index * 1.0; // Her harf 1 saniye arayla kırmızıya dönsün
+                    const letterColorProgress = Math.max(0, Math.min(1, colorAnimationStart - letterDelay));
+                    
+                    if (whitePhase > 0) {
+                        ctx.save();
+                        
+                        // Harf pozisyonu (eşit aralıklarla)
+                        const letterSpacing = fontSize * 0.8;
+                        const startX = textX - (letters.length - 1) * letterSpacing / 2;
+                        const letterX = startX + index * letterSpacing;
+                        
+                        // Nefes alma animasyonu (kaybolurken)
+                        const breatheEffect = Math.sin((time - textStartTime) * 0.1) * 0.05;
+                        const fadeScale = textOpacity < 0.5 ? textOpacity * 2 : 1; // Kaybolurken küçül
+                        const scale = (0.8 + whitePhase * 0.2 + breatheEffect) * fadeScale;
+                        
+                        ctx.translate(letterX, textY);
+                        ctx.scale(scale, scale);
+                        
+                        // Renk geçişi: Beyaz -> Kırmızı (yavaş)
+                        const red = Math.floor(255 * letterColorProgress + 255 * (1 - letterColorProgress));
+                        const green = Math.floor(0 * letterColorProgress + 255 * (1 - letterColorProgress));
+                        const blue = Math.floor(0 * letterColorProgress + 255 * (1 - letterColorProgress));
+                        
+                        // Minimal glow sadece kırmızıya dönerken
+                        if (letterColorProgress > 0) {
+                            ctx.shadowColor = `rgba(255, 0, 0, ${letterColorProgress * 0.3})`;
+                            ctx.shadowBlur = 5;
+                        }
+                        
+                        // Yazı rengi
+                        ctx.fillStyle = `rgb(${red}, ${green}, ${blue})`;
+                        
+                        // Harfi çiz
+                        ctx.fillText(letter, 0, 0);
+                        
+                        ctx.restore();
+                    }
+                });
+                
+                ctx.restore();
+            }
+            
+            time++;
+            requestAnimationFrame(animate);
+        }
+        
+        // Etkileşim fonksiyonu (mouse ve touch için ortak)
+        function handleInteraction(x, y) {
+            particles.forEach(particle => {
+                const dx = x - particle.x;
+                const dy = y - particle.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                
+                if (distance < 100) {
+                    const force = (100 - distance) / 100;
+                    particle.vx -= (dx / distance) * force * 0.5;
+                    particle.vy -= (dy / distance) * force * 0.5;
+                }
+            });
+        }
+
+        // Mouse etkileşimi
+        canvas.addEventListener('mousemove', (e) => {
+            handleInteraction(e.clientX, e.clientY);
+        });
+
+        // Touch etkileşimi (telefon için)
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            const touch = e.touches[0];
+            handleInteraction(touch.clientX, touch.clientY);
+        });
+
+        canvas.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            const touch = e.touches[0];
+            handleInteraction(touch.clientX, touch.clientY);
+        });
+
+        canvas.addEventListener('touchend', (e) => {
+            e.preventDefault();
+        });
+
+        // Multi-touch desteği
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            for (let i = 0; i < e.touches.length; i++) {
+                const touch = e.touches[i];
+                handleInteraction(touch.clientX, touch.clientY);
+            }
+        });
+
+        canvas.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            for (let i = 0; i < e.touches.length; i++) {
+                const touch = e.touches[i];
+                handleInteraction(touch.clientX, touch.clientY);
+            }
+        });
+        
+        // Pencere yeniden boyutlandırma
+        window.addEventListener('resize', () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        });
+        
+        // Başlat
+        createParticles();
+        animate();
+    </script>
+</body>
+</html>
